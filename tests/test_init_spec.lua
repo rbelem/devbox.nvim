@@ -467,6 +467,34 @@ describe("Devbox.activate / deactivate", function()
     assert.are.equal("two", vim.env.SECOND)
     assert.is_nil(vim.env.FIRST)  -- old vars don't carry over
   end)
+
+  it("two overlapping activations resolve _loading correctly", function()
+    helper.mock_executable(true)
+    local devbox = fresh()
+
+    -- First call: cache miss → starts async load (gen=1)
+    helper.mock_jobstart({ "export PATH=/devbox/test/bin:/usr/bin" }, 0)
+    local ok1 = devbox.activate(tmpdir)
+    assert.is_false(ok1) -- cache miss
+    assert.is_true(devbox.is_loading())
+
+    -- Clear cache so second activate also misses
+    devbox.clear_cache(tmpdir)
+
+    -- Second call: cache miss → starts second async load (gen=2)
+    helper.mock_jobstart({ "export PATH=/devbox/test/bin:/usr/bin" }, 0)
+    local ok2 = devbox.activate(tmpdir)
+    assert.is_false(ok2)
+    assert.is_true(devbox.is_loading())
+
+    -- Both on_exit callbacks are scheduled; wait for loading to finish
+    vim.wait(500, function() return not devbox.is_loading() end)
+
+    -- _loading must be false after all callbacks fire
+    assert.is_false(devbox.is_loading())
+    assert.is_true(devbox.is_active())
+    assert.are.equal(tmpdir, devbox.get_active_root())
+  end)
 end)
 
 -- ═══════════════════════════════════════════════════════════════

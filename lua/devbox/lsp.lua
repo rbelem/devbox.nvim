@@ -1,11 +1,6 @@
 ---@class devbox.LspModule
 local M = {}
 
-function M.setup()
-  -- Currently handled via vim.env injection in init.lua
-  -- This module exists for future explicit client config
-end
-
 --- Build an env table suitable for passing to an LSP client's `before_init`.
 --- Merges current vim.env with the devbox-resolved PATH.
 --- Returns nil if no devbox env is active.

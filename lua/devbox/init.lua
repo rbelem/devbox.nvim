@@ -27,6 +27,8 @@ local env_set_keys = {}
 local active_root = nil
 ---@type boolean
 local did_setup = false
+---@type integer  -- bumped on each _async_load; on_exit only clears _loading if gen matches
+local _load_gen = 0
 
 ---@param t table
 ---@return integer
@@ -38,7 +40,7 @@ local function tbl_count(t)
   return c
 end
 
-local function sha1(str)
+local function cache_hash(str)
   return vim.fn.sha256(str):sub(1, 40)
 end
 
@@ -46,7 +48,7 @@ end
 ---@param root string
 ---@return string
 local function cache_path(root)
-  local hash = sha1(root)
+  local hash = cache_hash(root)
   return vim.fn.stdpath("cache") .. "/devbox/" .. hash .. ".json"
 end
 
@@ -59,8 +61,8 @@ local function cache_load(root)
   if not ok or not data or #data == 0 then
     return nil
   end
-  local decoded = vim.json.decode(table.concat(data, "\n"))
-  if not decoded or not decoded.cached_at then
+  local ok_decode, decoded = pcall(vim.json.decode, table.concat(data, "\n"))
+  if not ok_decode or not decoded or not decoded.cached_at then
     return nil
   end
   -- check devbox.json mtime
@@ -141,7 +143,9 @@ function Devbox.setup(opts)
   end
 
   vim.api.nvim_create_user_command("DevboxActivate", function()
-    if not Devbox.activate() then
+    if not Devbox.available() then
+      vim.notify("[devbox] devbox binary not found", vim.log.levels.WARN)
+    elseif not Devbox.activate() then
       vim.notify("[devbox] no devbox.json found", vim.log.levels.INFO)
     end
   end, { desc = "[devbox] activate devbox env" })
@@ -295,6 +299,8 @@ end
 ---@async
 ---@param root string
 function Devbox._async_load(root)
+  _load_gen = _load_gen + 1
+  local gen = _load_gen
   Devbox._loading = true
 
   if not config.options.silent then
@@ -310,11 +316,13 @@ function Devbox._async_load(root)
       chunks = data
     end,
     on_exit = vim.schedule_wrap(function(_, exit_code)
+      if gen == _load_gen then
+        Devbox._loading = false
+      end
       if finished or active_root then
         return
       end
       finished = true
-      Devbox._loading = false
 
       if exit_code ~= 0 then
         if not config.options.silent then

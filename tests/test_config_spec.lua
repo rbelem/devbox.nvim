@@ -13,8 +13,6 @@ describe("devbox.config", function()
     package.loaded["devbox.config"] = nil
     defaults_shallow = {
       auto_activate = true,
-      update_env = true,
-      strategy = "async",
       silent = false,
       devbox_path = "devbox",
       lsp = { inject_env = true },
@@ -35,11 +33,6 @@ describe("devbox.config", function()
       assert.is_true(config.defaults.auto_activate)
     end)
 
-    it("contains strategy = 'async'", function()
-      local config = require("devbox.config")
-      assert.are.equal("async", config.defaults.strategy)
-    end)
-
     it("contains lsp.inject_env = true", function()
       local config = require("devbox.config")
       assert.is_true(config.defaults.lsp.inject_env)
@@ -55,14 +48,12 @@ describe("devbox.config", function()
     it("returns options with defaults when called with nil", function()
       local config = require("devbox.config")
       config.setup(nil)
-      assert.are.equal("async", config.options.strategy)
       assert.is_true(config.options.auto_activate)
     end)
 
     it("returns options with defaults when called with empty table", function()
       local config = require("devbox.config")
       config.setup({})
-      assert.are.equal("async", config.options.strategy)
       assert.is_true(config.options.auto_activate)
     end)
 
@@ -71,23 +62,12 @@ describe("devbox.config", function()
       config.setup({ silent = true, auto_activate = false })
       assert.is_true(config.options.silent)
       assert.is_false(config.options.auto_activate)
-      -- non-overridden field stays default
-      assert.are.equal("async", config.options.strategy)
     end)
 
     it("merges nested lsp table", function()
       local config = require("devbox.config")
       config.setup({ lsp = { inject_env = false } })
       assert.is_false(config.options.lsp.inject_env)
-    end)
-
-    it("does not mutate the defaults table", function()
-      local config = require("devbox.config")
-      local orig_strategy = config.defaults.strategy
-      config.setup({ strategy = "sync" })
-      -- defaults unchanged
-      assert.are.equal(orig_strategy, config.defaults.strategy)
-      assert.are.equal("sync", config.options.strategy)
     end)
 
     it("accepts custom devbox_path", function()

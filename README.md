@@ -56,7 +56,10 @@ Never blocks startup. Disk cache makes repeat opens instant; async
 
 ```lua
 vim.pack.add {
-  { src = "https://github.com/rbelem/devbox.nvim" },
+  {
+    src = "https://github.com/rbelem/devbox.nvim",
+    config = function() require("devbox").setup({}) end,
+  },
 }
 ```
 
@@ -68,13 +71,13 @@ require("devbox").setup({})
 
 ## Configuration
 
-`devbox.nvim` works out of the box with no configuration. Commonly changed
-options:
+`devbox.nvim` works out of the box with no configuration. Override only
+what you need:
 
 ```lua
 require("devbox").setup({
-  silent = false,    -- set to true to suppress notifications
-  devbox_path = "devbox", -- custom path to devbox binary
+  silent = true,         -- suppress activation/deactivation notifications
+  auto_activate = false, -- manual :DevboxActivate only
 })
 ```
 
@@ -83,13 +86,11 @@ Full defaults:
 ```lua
 {
   auto_activate  = true,            -- auto-activate on buffer open
-  update_env     = true,            -- set vim.env from devbox shellenv
-  strategy       = "async",         -- "async" (default) | "sync"
   silent         = false,           -- suppress notifications
   devbox_path    = "devbox",        -- path to devbox binary
   lsp            = { inject_env = true },
   exclude_env    = {
-    "^ATUIN_",                      -- shell history
+    "^ATUIN_",                      -- shell-specific vars (Lua patterns)
     "^BLE_",
     "_PREEXEC_",
     "^BASH_",
@@ -113,36 +114,54 @@ Full defaults:
 
 ## How It Works
 
-1. You open a file inside a project that has `devbox.json`
-2. `devbox.nvim` walks up the directory tree to find the project root
-3. **Cache hit**: loads cached env from disk — instant
-4. **Cache miss**: runs `devbox shellenv` asynchronously via `jobstart`
-5. Parses `export KEY=VALUE` lines, skips excluded vars, writes to `vim.env`
-6. LSP clients inherit the updated `PATH` via `LspAttach` hook
+1. Open a file inside a project with `devbox.json`
+2. Walk up the tree to find the project root
+3. **In-memory cache hit** — env already resolved this session: instant
+4. **Disk cache hit** — load from disk, auto-refresh in background: ~0.4ms
+5. **Cache miss** — run `devbox shellenv` async via `jobstart`: ~250ms
+6. Parse `export KEY=VALUE` lines, filter excluded vars, write to `vim.env`
+7. `LspAttach` hook injects devbox `PATH` into LSP clients
+8. `:DevboxDeactivate` restores `vim.env` from the pre-activation snapshot
 
-Deactivation restores `vim.env` to the snapshot taken at activation.
+Cache is invalidated automatically when `devbox.json` mtime changes.
 
 ## Advanced Usage
 
 ### LSP Module
 
-The `devbox.lsp` module provides `make_lsp_env()` for explicit LSP client
-configuration:
+By default, devbox.nvim injects `PATH` into LSP clients automatically via
+`LspAttach` when the env is active. No configuration needed.
+
+If you need explicit control (e.g. merging env vars for a specific server),
+the `devbox.lsp` module provides `make_lsp_env()`:
 
 ```lua
 local devbox_lsp = require("devbox.lsp")
+
+-- Option A: before_init (Neovim 0.11+)
 vim.lsp.config("jdtls", {
   before_init = function(params, config)
-    config.env = devbox_lsp.make_lsp_env()
+    local env = devbox_lsp.make_lsp_env()
+    if env then
+      config.cmd_env = env
+    end
+  end,
+})
+
+-- Option B: LspAttach autocmd (Neovim 0.10)
+vim.api.nvim_create_autocmd("LspAttach", {
+  callback = function(args)
+    local client = vim.lsp.get_client_by_id(args.data.client_id)
+    if client then
+      local env = devbox_lsp.make_lsp_env()
+      if env then
+        -- make_lsp_env returns a complete env table with full PATH
+        client.config.cmd_env = env
+      end
+    end
   end,
 })
 ```
-
-### Sync Strategy
-
-If you prefer blocking resolution (e.g., on `VimEnter`), set
-`strategy = "sync"`. Note that sync runs synchronously via `vim.fn.system` —
-consider async unless you have a specific reason.
 
 ## FAQ
 
@@ -152,7 +171,8 @@ find devbox-managed binaries. You still use `devbox shell` in your terminal for
 interactive work.
 
 **Q: What happens if `devbox` binary is not installed?**
-The plugin silently skips activation (shows a warning unless `silent = true`).
+Auto-activation silently skips. Running `:DevboxActivate` manually shows
+a warning (`devbox binary not found`).
 
 **Q: Can I use this without auto-activation?**
 Yes. Set `auto_activate = false` and call `:DevboxActivate` manually.

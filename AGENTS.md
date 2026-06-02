@@ -22,7 +22,7 @@ Entry point: `require("devbox").setup(opts)`.
 ## Key architecture
 
 - **Never blocks startup.** `activate()` returns immediately even on cache miss — spawns `vim.fn.jobstart("devbox shellenv", ...)` in background.
-- **Two-tier cache:** in-memory table + disk files at `stdpath("cache")/devbox/<sha1(project_root)>.json`. Invalidated when `devbox.json` mtime changes.
+- **Two-tier cache:** in-memory table + disk files at `stdpath("cache")/devbox/<cache_hash(project_root)>.json`. Invalidated when `devbox.json` mtime changes.
 - **Env snapshot:** first `activate()` snapshots entire `vim.env`; `deactivate()` restores it.
 - **LSP injection:** `LspAttach` autocmd prepends devbox PATH into `client.config.cmd_env`. Only works for future attaches.
 - **Shell env parser:** naive `export KEY=VALUE` regex — no bash evaluation. Excluded vars filtered by prefix patterns.
@@ -40,7 +40,7 @@ Entry point: `require("devbox").setup(opts)`.
 
 ## Config quirks
 
-- `strategy = "sync"` exists but uses `vim.fn.system` (blocks). Default `"async"` is strongly preferred.
+- `strategy` field was removed — the plugin is always async. No blocking strategy is offered.
 - `lsp.inject_env = true` is the default — disable if user manages LSP env manually.
 - `exclude_env` defaults filter shell-specific vars (`ATUIN_`, `BASH_`, `HIST`, `PROMPT`, etc.). Extend by listing more Lua patterns.
 
