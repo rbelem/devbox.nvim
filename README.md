@@ -28,7 +28,7 @@ Never blocks startup. Disk cache makes repeat opens instant; async
 - **LSP integration** — `LspAttach` auto‑injects devbox `PATH` into LSP client
   environments
 - **Smart env filtering** — Skips shell-specific variables (`ATUIN_`, `BASH_`,
-  `HIST`, `PROMPT`, etc.)
+  `HIST`, `PROMPT`, `SHELL`, `TERM`, etc.)
 - **Env snapshot** — Captures pre‑activation state; `deactivate()` restores it
   fully
 - **Commands** — `DevboxActivate`, `DevboxDeactivate`, `DevboxStatus`,
@@ -56,11 +56,9 @@ Never blocks startup. Disk cache makes repeat opens instant; async
 
 ```lua
 vim.pack.add {
-  {
-    src = "https://github.com/rbelem/devbox.nvim",
-    config = function() require("devbox").setup({}) end,
-  },
+  src = "https://github.com/rbelem/devbox.nvim",
 }
+require("devbox").setup({})
 ```
 
 **Manual** (any plugin manager):
@@ -116,12 +114,13 @@ Full defaults:
 
 1. Open a file inside a project with `devbox.json`
 2. Walk up the tree to find the project root
-3. **In-memory cache hit** — env already resolved this session: instant
-4. **Disk cache hit** — load from disk, auto-refresh in background: ~0.4ms
-5. **Cache miss** — run `devbox shellenv` async via `jobstart`: ~250ms
-6. Parse `export KEY=VALUE` lines, filter excluded vars, write to `vim.env`
-7. `LspAttach` hook injects devbox `PATH` into LSP clients
-8. `:DevboxDeactivate` restores `vim.env` from the pre-activation snapshot
+3. **Cache lookup** — determines the path through one of:
+   - **In-memory hit** — env already resolved this session: instant
+   - **Disk hit** — load from disk, auto-refresh in background: ~0.4ms
+   - **Miss** — run `devbox shellenv` async via `jobstart`: ~250ms
+4. Parse `export KEY=VALUE` lines, filter excluded vars, write to `vim.env`
+5. `LspAttach` hook injects devbox `PATH` into LSP clients
+6. `:DevboxDeactivate` restores `vim.env` from the pre-activation snapshot
 
 Cache is invalidated automatically when `devbox.json` mtime changes.
 
@@ -140,22 +139,26 @@ local devbox_lsp = require("devbox.lsp")
 
 -- Option A: before_init (Neovim 0.11+)
 vim.lsp.config("jdtls", {
-  before_init = function(params, config)
+  before_init = function(params, cfg)
     local env = devbox_lsp.make_lsp_env()
     if env then
-      config.cmd_env = env
+      cfg.cmd_env = env
     end
   end,
 })
 
 -- Option B: LspAttach autocmd (Neovim 0.10)
+-- Note: make_lsp_env() replaces PATH entirely with the devbox-resolved
+-- value (which already includes system paths). The automatic LspAttach
+-- hook used by the plugin prepends devbox PATH to the existing value
+-- instead — no difference in practice since devbox shellenv includes
+-- the full system PATH.
 vim.api.nvim_create_autocmd("LspAttach", {
   callback = function(args)
     local client = vim.lsp.get_client_by_id(args.data.client_id)
     if client then
       local env = devbox_lsp.make_lsp_env()
       if env then
-        -- make_lsp_env returns a complete env table with full PATH
         client.config.cmd_env = env
       end
     end
