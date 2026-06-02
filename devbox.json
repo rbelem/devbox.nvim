@@ -1,0 +1,22 @@
+{
+  "$schema":  "https://raw.githubusercontent.com/jetify-com/devbox/0.17.2/.schema/devbox.schema.json",
+  "packages": ["markdownlint-cli@latest"],
+  "shell": {
+    "init_hook": [
+      "echo 'Welcome to devbox!' > /dev/null"
+    ],
+    "scripts": {
+      "test": [
+        "mkdir -p .deps",
+        "[ -d .deps/plenary.nvim ] || git clone --depth=1 --filter=blob:none https://github.com/nvim-lua/plenary.nvim.git .deps/plenary.nvim",
+        "nvim --headless --cmd \"set rtp+=.deps/plenary.nvim\" --cmd \"set rtp+=.\" -c \"lua require('plenary.test_harness').test_directory('tests/', {minimal_init = 'tests/init.lua', sequential = true})\" -c \"qa!\""
+      ],
+      "test-file": [
+        "mkdir -p .deps",
+        "[ -d .deps/plenary.nvim ] || git clone --depth=1 --filter=blob:none https://github.com/nvim-lua/plenary.nvim.git .deps/plenary.nvim",
+        "nvim --headless --cmd \"set rtp+=.deps/plenary.nvim\" --cmd \"set rtp+=.\" -c \"lua require('plenary.test_harness').test_file('$FILE', {minimal_init = 'tests/init.lua', sequential = true})\" -c \"qa!\""
+      ],
+      "clean": "rm -rf .deps"
+    }
+  }
+}

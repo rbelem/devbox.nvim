@@ -21,6 +21,8 @@ local Devbox = {}
 local env_cache = {}
 ---@type table<string, string>
 local env_snapshot = {}
+---@type table<string, true>  -- keys set by this activation
+local env_set_keys = {}
 ---@type string?
 local active_root = nil
 ---@type boolean
@@ -246,6 +248,12 @@ function Devbox.deactivate()
   for k, v in pairs(env_snapshot) do
     vim.env[k] = v
   end
+  for k, _ in pairs(env_set_keys) do
+    if env_snapshot[k] == nil then
+      vim.env[k] = nil
+    end
+  end
+  env_set_keys = {}
   active_root = nil
   Devbox._loading = false
   if not config.options.silent then
@@ -390,13 +398,16 @@ end
 ---@param env devbox.Env
 function Devbox._apply_env(env)
   if tbl_count(env_snapshot) == 0 then
-    for k, v in pairs(vim.env) do
+    -- vim.fn.environ() returns a regular Lua table (pairs-safe).
+    -- pairs(vim.env) is unreliable across Neovim versions.
+    for k, v in pairs(vim.fn.environ()) do
       env_snapshot[k] = v
     end
   end
   for k, v in pairs(env.vars) do
     if not Devbox._is_excluded(k) then
       vim.env[k] = v
+      env_set_keys[k] = true
     end
   end
   if not config.options.silent then

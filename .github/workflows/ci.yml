@@ -1,0 +1,53 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+env:
+  PLENARY_DIR: /tmp/plenary.nvim
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        neovim_version: ['stable', 'nightly']
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim_version }}
+
+      - name: Install plenary.nvim
+        run: |
+          git clone --depth=1 --filter=blob:none \
+            https://github.com/nvim-lua/plenary.nvim.git $PLENARY_DIR
+
+      - name: Run tests
+        run: |
+          nvim --headless \
+            --cmd "set rtp+=$PLENARY_DIR" \
+            --cmd "set rtp+=." \
+            -c "lua require('plenary.test_harness').test_directory('tests/', {minimal_init = 'tests/init.lua', sequential = true})" \
+            -c "qa!"
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install markdownlint
+        run: npm install -g markdownlint-cli
+      - name: Lint markdown
+        run: markdownlint README.md AGENTS.md
