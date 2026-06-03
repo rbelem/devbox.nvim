@@ -18,6 +18,39 @@ M._generated_map = nil
 ---@type table<string, {binary: string}>
 M._user_map = {}
 
+--- Nix package map: lspconfig name → nixpkgs attribute path.
+--- Loaded from the checked-in nix_map.json at startup.
+---@type table<string, string>
+M._nix_map = {}
+
+-- Load the nix package map on module init
+do
+  local nix_path = vim.fn.stdpath("cache") .. "/devbox/nix_map.json"
+  local ok, data = pcall(vim.fn.readfile, nix_path)
+  if ok and data and #data > 0 then
+    local ok_decode, decoded = pcall(vim.json.decode, table.concat(data, "\n"))
+    if ok_decode and decoded then
+      M._nix_map = decoded
+    end
+  end
+  -- Also try the project-relative path (for repo-checked-in version)
+  local project_path = vim.fn.getcwd() .. "/lua/devbox/lsp/nix_map.json"
+  if project_path ~= nix_path then
+    local ok2, data2 = pcall(vim.fn.readfile, project_path)
+    if ok2 and data2 and #data2 > 0 then
+      local ok_decode2, decoded2 = pcall(vim.json.decode, table.concat(data2, "\n"))
+      if ok_decode2 and decoded2 then
+        -- Merge: checked-in map as fallback, cache overrides
+        for k, v in pairs(decoded2) do
+          if not M._nix_map[k] then
+            M._nix_map[k] = v
+          end
+        end
+      end
+    end
+  end
+end
+
 ---@return string
 local function _cache_path()
   return vim.fn.stdpath("cache") .. "/devbox/lsp_servers.json"
@@ -135,6 +168,12 @@ function M.detect(filter)
   _load_or_generate()
 
   local map = vim.tbl_extend("force", M._generated_map or {}, M._user_map)
+  -- Enrich with nix package names from the checked-in map
+  for name, entry in pairs(map) do
+    if type(entry) == "table" and not entry.nix then
+      entry.nix = M._nix_map[name]
+    end
+  end
   local detected = {}
   for name, entry in pairs(map) do
     if type(entry) == "table" and entry.binary then
