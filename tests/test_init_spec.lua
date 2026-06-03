@@ -301,7 +301,7 @@ end)
 -- activate / deactivate cycle
 -- ═══════════════════════════════════════════════════════════════
 
-describe("Devbox.activate / deactivate", function()
+describe("Devbox.activate", function()
   local tmpdir
 
   --- Activate into tmpdir with mocked devbox shellenv output.
@@ -410,62 +410,6 @@ describe("Devbox.activate / deactivate", function()
     vim.wait(500, function() return not devbox.is_loading() end)
     assert.is_true(devbox.is_active())
     assert.are.equal(tmpdir, devbox.get_active_root())
-  end)
-
-  it("deactivate clears active state and restores env", function()
-    helper.mock_executable(true)
-    local devbox = fresh()
-    local orig_path = vim.env.PATH
-
-    activate_mocked(devbox, { EXTRA_VAR = "mocked_value" })
-
-    -- Verify env was modified
-    assert.are.equal("mocked_value", vim.env.EXTRA_VAR)
-    -- PATH changed from original
-    assert.are.not_equal(orig_path, vim.env.PATH)
-
-    devbox.deactivate()
-    assert.is_false(devbox.is_active())
-    assert.is_nil(devbox.get_active_root())
-    -- PATH restored to original
-    assert.are.equal(orig_path, vim.env.PATH)
-    -- mocked var gone
-    assert.is_nil(vim.env.EXTRA_VAR)
-  end)
-
-  it("deactivate is a no-op on fresh session (no active_root)", function()
-    local devbox = fresh()
-    local orig_path = vim.env.PATH
-    devbox.deactivate()
-    -- PATH unchanged, no errors
-    assert.are.equal(orig_path, vim.env.PATH)
-    assert.is_false(devbox.is_active())
-  end)
-
-  it("second activation after deactivate works", function()
-    helper.mock_executable(true)
-    local devbox = fresh()
-    activate_mocked(devbox, { FIRST = "one" })
-    assert.are.equal("one", vim.env.FIRST)
-
-    devbox.deactivate()
-    assert.is_nil(vim.env.FIRST)
-
-    -- Clear cache so next activate re-runs shellenv (forced miss)
-    devbox.clear_cache(tmpdir)
-
-    -- Re-activate with different vars
-    helper.mock_jobstart({
-      "export PATH=/devbox/test/bin:/usr/bin",
-      "export JAVA_HOME=/opt/java",
-      "export SECOND=two",
-    }, 0)
-    local ok = devbox.activate(tmpdir)
-    assert.is_false(ok)  -- cache cleared → miss
-    vim.wait(500, function() return not devbox.is_loading() end)
-    assert.is_true(devbox.is_active())
-    assert.are.equal("two", vim.env.SECOND)
-    assert.is_nil(vim.env.FIRST)  -- old vars don't carry over
   end)
 
   it("two overlapping activations resolve _loading correctly", function()
@@ -617,8 +561,6 @@ describe("Devbox.clear_cache", function()
     vim.wait(500, function() return not devbox.is_loading() end)
     assert.is_true(devbox.is_active())
 
-    devbox.deactivate()
-
     -- clear just this project's cache
     devbox.clear_cache(tmpdir)
 
@@ -681,5 +623,154 @@ describe("Devbox state accessors", function()
   it("get_path returns empty string initially", function()
     local devbox = require("devbox")
     assert.are.equal("", devbox.get_path())
+  end)
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- auto_enable integration
+-- ═══════════════════════════════════════════════════════════════
+
+describe("Devbox auto_enable", function()
+  local tmpdir
+
+  before_each(function()
+    helper.take_env_snapshot()
+    helper.mock_lspconfig()  -- make pcall(require, "lspconfig") succeed
+    tmpdir = helper.temp_project(true)
+  end)
+
+  after_each(function()
+    helper.restore_jobstart()
+    helper.restore_executable()
+    helper.restore_lspconfig()
+    helper.restore_env()
+    helper.rmdir(tmpdir)
+  end)
+
+  it("does not enable servers when auto_enable is false (default)", function()
+    helper.mock_executable(true)
+    local devbox = fresh({ lsp = { auto_enable = false, inject_env = true } })
+
+    helper.mock_jobstart({
+      "export PATH=/devbox/bin:/usr/bin",
+    }, 0)
+    devbox.activate(tmpdir)
+    vim.wait(500, function() return not devbox.is_loading() end)
+
+    -- No servers should have been enabled
+    assert.is_false(vim.lsp.is_enabled("lua_ls"))
+  end)
+
+  it("enables detected servers when auto_enable is true", function()
+    helper.mock_executable({
+      ["lua-language-server"] = true,
+      ["typescript-language-server"] = false,
+    })
+    local devbox = fresh({ lsp = { auto_enable = true, inject_env = true } })
+
+    -- Register a mapping so detect() finds something
+    local servers = require("devbox.lsp.servers")
+    servers._generated_map = {}
+    servers.add_mapping("lua-language-server", "lua_ls")
+    servers.add_mapping("typescript-language-server", "ts_ls")
+
+    -- Use cache-hit path: prime the cache via first activation, then re-activate
+    -- to exercise the sync path which calls _apply_env inline
+    helper.mock_jobstart({
+      "export PATH=/devbox/bin:/usr/bin",
+    }, 0)
+    devbox.activate(tmpdir)
+
+    -- Manually call _apply_env to simulate the activation applying env
+    local test_env = {
+      vars = { PATH = "/devbox/bin:/usr/bin" },
+      project_root = tmpdir,
+      path = "/devbox/bin:/usr/bin",
+    }
+    devbox._apply_env(test_env)
+
+    assert.is_true(vim.lsp.is_enabled("lua_ls"), "lua_ls should be enabled")
+    assert.is_false(vim.lsp.is_enabled("ts_ls"), "ts_ls should NOT be enabled")
+  end)
+
+  it("respects auto_enable_filter", function()
+    helper.mock_executable({
+      ["lua-language-server"] = true,
+      ["typescript-language-server"] = true,
+    })
+    local devbox = fresh({
+      lsp = {
+        auto_enable = true,
+        auto_enable_filter = { "lua_ls" },
+        inject_env = true,
+      },
+    })
+
+    local servers = require("devbox.lsp.servers")
+    servers._generated_map = {}
+    servers.add_mapping("lua-language-server", "lua_ls")
+    servers.add_mapping("typescript-language-server", "ts_ls")
+
+    local test_env = {
+      vars = { PATH = "/devbox/bin:/usr/bin" },
+      project_root = tmpdir,
+      path = "/devbox/bin:/usr/bin",
+    }
+    devbox._apply_env(test_env)
+
+    assert.is_true(vim.lsp.is_enabled("lua_ls"), "lua_ls should be enabled")
+    assert.is_false(vim.lsp.is_enabled("ts_ls"), "ts_ls should be filtered out")
+  end)
+
+  it("does not error when nvim-lspconfig is not installed", function()
+    -- Remove our mock so pcall(require, "lspconfig") fails
+    package.loaded["lspconfig"] = nil
+
+    helper.mock_executable(true)
+    local devbox = fresh({ lsp = { auto_enable = true, inject_env = true } })
+
+    helper.mock_jobstart({
+      "export PATH=/devbox/bin:/usr/bin",
+    }, 0)
+    devbox.activate(tmpdir)
+    vim.wait(500, function() return not devbox.is_loading() end)
+
+    -- No errors should occur; just disabled
+    assert.is_true(true)
+  end)
+
+  it("calling _maybe_auto_enable directly enables servers", function()
+    helper.mock_executable({ ["lua-language-server"] = true })
+    local devbox = fresh({ lsp = { auto_enable = true, inject_env = true } })
+
+    local servers = require("devbox.lsp.servers")
+    servers.add_mapping("lua-language-server", "lua_ls")
+
+    -- Manually call the auto-enable function (simulates what activation does)
+    local count = devbox._maybe_auto_enable()
+    assert.are.equal(1, count, "should detect 1 server")
+
+    -- Check via vim.lsp.is_enabled
+    assert.is_true(vim.lsp.is_enabled("lua_ls"), "lua_ls should be enabled")
+  end)
+
+  it("triggers auto-enable on cache hit path", function()
+    helper.mock_executable({ ["lua-language-server"] = true })
+    local devbox = fresh({ lsp = { auto_enable = true, inject_env = true } })
+
+    local servers = require("devbox.lsp.servers")
+    servers._generated_map = {}
+    servers.add_mapping("lua-language-server", "lua_ls")
+
+    -- Simulate a cache-hit activation: call _apply_env directly
+    -- (this is what activate() does on the cache-hit path)
+    local test_env = {
+      vars = { PATH = "/devbox/bin:/usr/bin" },
+      project_root = tmpdir,
+      path = "/devbox/bin:/usr/bin",
+    }
+    devbox._apply_env(test_env)
+
+    assert.is_true(vim.lsp.is_enabled("lua_ls"), "lua_ls should be enabled after _apply_env")
   end)
 end)

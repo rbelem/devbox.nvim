@@ -2,7 +2,7 @@
 ---@field auto_activate boolean
 ---@field silent boolean
 ---@field devbox_path string
----@field lsp? { inject_env: boolean }
+---@field lsp? { inject_env: boolean, auto_enable?: boolean, auto_enable_filter?: string[] }
 ---@field exclude_env? string[]
 
 local M = {}
@@ -12,7 +12,7 @@ M.defaults = {
   auto_activate = true,
   silent = false,
   devbox_path = "devbox",
-  lsp = { inject_env = true },
+  lsp = { inject_env = true, auto_enable = false },
   exclude_env = {
     "^ATUIN_",
     "^BLE_",

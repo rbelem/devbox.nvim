@@ -6,6 +6,10 @@
 --
 -- Never blocks startup. Uses disk cache so even the first file open in a new
 -- session loads instant (cold ~250ms once, cached ~0.4ms thereafter).
+--
+-- Activation is one-way: once active, the env stays for the session. There is
+-- no deactivation (see ADR 0001 — direnv.nvim precedent). Use `DevboxActivate`
+-- to re-activate or switch projects manually.
 
 ---@class devbox.Env
 ---@field vars table<string, string>
@@ -19,10 +23,6 @@ local Devbox = {}
 
 ---@type table<string, devbox.Env>
 local env_cache = {}
----@type table<string, string>
-local env_snapshot = {}
----@type table<string, true>  -- keys set by this activation
-local env_set_keys = {}
 ---@type string?
 local active_root = nil
 ---@type boolean
@@ -92,6 +92,32 @@ local function cache_save(root, env)
   end
 end
 
+--- Auto-detect and enable LSP servers from the devbox PATH.
+--- Only runs when auto_enable is configured and nvim-lspconfig is installed.
+---@return integer number of servers enabled
+---@return integer
+function Devbox._maybe_auto_enable()
+  if not config.options.lsp or not config.options.lsp.auto_enable then
+    return 0
+  end
+  local ok, _ = pcall(require, "lspconfig")
+  if not ok then
+    return 0
+  end
+  local servers = require("devbox.lsp.servers")
+  local filter = config.options.lsp.auto_enable_filter
+  local filter_set
+  if filter then
+    filter_set = {}
+    for _, name in ipairs(filter) do
+      filter_set[name] = true
+    end
+  end
+  local detected = servers.detect(filter_set)
+  servers.enable(detected)
+  return #detected
+end
+
 ---@param opts? devbox.Config
 function Devbox.setup(opts)
   if did_setup then
@@ -120,7 +146,6 @@ function Devbox.setup(opts)
       group = grp,
       desc = "[devbox] re-check",
       callback = function()
-        Devbox.deactivate()
         Devbox.activate()
       end,
     })
@@ -149,10 +174,6 @@ function Devbox.setup(opts)
       vim.notify("[devbox] no devbox.json found", vim.log.levels.INFO)
     end
   end, { desc = "[devbox] activate devbox env" })
-
-  vim.api.nvim_create_user_command("DevboxDeactivate", function()
-    Devbox.deactivate()
-  end, { desc = "[devbox] deactivate devbox env" })
 
   vim.api.nvim_create_user_command("DevboxStatus", function()
     if Devbox.is_loading() then
@@ -242,27 +263,6 @@ function Devbox.activate(dir)
   -- no cache: async load
   Devbox._async_load(root)
   return false
-end
-
---- Restore vim.env to the state before activation.
-function Devbox.deactivate()
-  if not active_root then
-    return
-  end
-  for k, v in pairs(env_snapshot) do
-    vim.env[k] = v
-  end
-  for k, _ in pairs(env_set_keys) do
-    if env_snapshot[k] == nil then
-      vim.env[k] = nil
-    end
-  end
-  env_set_keys = {}
-  active_root = nil
-  Devbox._loading = false
-  if not config.options.silent then
-    vim.notify("[devbox] deactivated", vim.log.levels.INFO)
-  end
 end
 
 ---@return string?
@@ -402,28 +402,22 @@ function Devbox._is_excluded(key)
   return false
 end
 
---- Apply a parsed devbox env to vim.env.
+--- Apply a parsed devbox env to vim.env, then auto-enable LSP servers.
 ---@param env devbox.Env
 function Devbox._apply_env(env)
-  if tbl_count(env_snapshot) == 0 then
-    -- vim.fn.environ() returns a regular Lua table (pairs-safe).
-    -- pairs(vim.env) is unreliable across Neovim versions.
-    for k, v in pairs(vim.fn.environ()) do
-      env_snapshot[k] = v
-    end
-  end
   for k, v in pairs(env.vars) do
     if not Devbox._is_excluded(k) then
       vim.env[k] = v
-      env_set_keys[k] = true
     end
   end
+  local lsp_count = Devbox._maybe_auto_enable()
   if not config.options.silent then
     local name = vim.fn.fnamemodify(env.project_root, ":t")
-    vim.notify(
-      string.format("[devbox] activated %s (%d vars)", name, tbl_count(env.vars)),
-      vim.log.levels.INFO
-    )
+    local msg = string.format("[devbox] activated %s (%d vars)", name, tbl_count(env.vars))
+    if lsp_count > 0 then
+      msg = msg .. string.format(", %d LSP servers", lsp_count)
+    end
+    vim.notify(msg, vim.log.levels.INFO)
   end
 end
 
