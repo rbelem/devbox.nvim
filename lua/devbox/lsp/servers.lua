@@ -39,14 +39,18 @@ do
     local ok2, data2 = pcall(vim.fn.readfile, project_path)
     if ok2 and data2 and #data2 > 0 then
       local ok_decode2, decoded2 = pcall(vim.json.decode, table.concat(data2, "\n"))
-      if ok_decode2 and decoded2 then
-        -- Merge: checked-in map as fallback, cache overrides
-        for k, v in pairs(decoded2) do
-          if not M._nix_map[k] then
+    if ok_decode2 and decoded2 then
+      for k, v in pairs(decoded2) do
+        if not M._nix_map[k] and v ~= vim.NIL then
+          -- If the value is an array, take the best (first) element
+          if type(v) == "table" and #v > 0 then
+            M._nix_map[k] = v[1]
+          else
             M._nix_map[k] = v
           end
         end
       end
+    end
     end
   end
 end
