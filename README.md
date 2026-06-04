@@ -218,6 +218,22 @@ servers.add_mapping({
 
 User mappings override auto-detected entries when names collide.
 
+#### Nix package map
+
+When a server is detected, the plugin also looks up its nixpkgs attribute name
+from the checked-in [`lua/devbox/lsp/nix_map.json`](lua/devbox/lsp/nix_map.json)
+(345 servers, auto-generated). This enriches detection with the correct
+`nix profile install` command for each server.
+
+If nvim-lspconfig ships new servers not yet in the map, regenerate it locally:
+
+```bash
+devbox run generate-nix-map
+```
+
+Requires `nix-search` CLI and nvim-lspconfig installed. CI validates the map
+structure and reports drift but does not auto-regenerate (needs `nix-search`).
+
 *Requires:* [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) installed
 (the plugin degrades gracefully if missing).
 
