@@ -51,3 +51,40 @@ jobs:
         run: npm install -g markdownlint-cli
       - name: Lint markdown
         run: markdownlint README.md AGENTS.md
+
+  validate-nix-map:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      - name: Install plenary.nvim
+        run: |
+          git clone --depth=1 --filter=blob:none \
+            https://github.com/nvim-lua/plenary.nvim.git /tmp/plenary.nvim
+
+      - name: Validate nix_map.json structure
+        run: |
+          nvim --headless \
+            --cmd "set rtp+=." \
+            -c "luafile scripts/validate_nix_map.lua" \
+            -c "qa!"
+
+      - name: Install nvim-lspconfig for drift detection
+        run: |
+          git clone --depth=1 --filter=blob:none \
+            https://github.com/neovim/nvim-lspconfig.git /tmp/nvim-lspconfig
+
+      - name: Detect drift from nvim-lspconfig
+        run: |
+          nvim --headless \
+            --cmd "set rtp+=/tmp/plenary.nvim" \
+            --cmd "set rtp+=/tmp/nvim-lspconfig" \
+            --cmd "set rtp+=." \
+            -c "luafile scripts/validate_nix_map.lua" \
+            -c "qa!"
