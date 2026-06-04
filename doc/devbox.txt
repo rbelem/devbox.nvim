@@ -1,0 +1,296 @@
+*devbox.txt*   Devbox environment integration for Neovim
+
+==============================================================================
+CONTENTS                                                    *devbox-contents*
+
+  1. Introduction ................... |devbox-intro|
+  2. Requirements .................. |devbox-requirements|
+  3. Installation .................. |devbox-install|
+  4. Configuration ................. |devbox-config|
+  5. Commands ...................... |devbox-commands|
+  6. How It Works .................. |devbox-how-it-works|
+  7. LSP Integration ............... |devbox-lsp|
+     - Automatic PATH injection .... |devbox-lsp-inject|
+     - Auto-enable servers ......... |devbox-lsp-auto-enable|
+     - Custom mappings ............. |devbox-lsp-custom-mappings|
+     - make_lsp_env() .............. |devbox-lsp-make-env|
+  8. FAQ ........................... |devbox-faq|
+  9. License ....................... |devbox-license|
+
+==============================================================================
+1. Introduction                                    *devbox-intro*
+
+devbox.nvim seamlessly integrates Devbox
+(https://www.jetify.com/devbox/) environments into Neovim.
+
+Open any file inside a Devbox project — the plugin detects |devbox.json|,
+resolves the environment, and injects variables into |vim.env| so LSP servers,
+formatters, linters, and tools find the right binaries without global installs.
+No manual `devbox shell` needed.
+
+Never blocks startup. Disk cache makes repeat opens instant; async
+`devbox shellenv` resolves the first time in the background.
+
+==============================================================================
+2. Requirements                                  *devbox-requirements*
+
+  - Neovim >= 0.10 (uses |vim.fs.root|)
+  - Devbox installed on $PATH
+  - A project with |devbox.json|
+  - (optional) nvim-lspconfig for LSP auto-enable feature
+
+==============================================================================
+3. Installation                                      *devbox-install*
+
+lazy.nvim (recommended) >
+  {
+    "rbelem/devbox.nvim",
+    opts = {},
+  }
+
+vim.pack (Neovim 0.12+) >
+  vim.pack.add {
+    src = "https://github.com/rbelem/devbox.nvim",
+  }
+  require("devbox").setup({})
+
+Manual (any plugin manager) >
+  require("devbox").setup({})
+
+==============================================================================
+4. Configuration                                      *devbox-config*
+
+devbox.nvim works out of the box with no configuration. Override only what you
+need.
+
+Example: >
+  require("devbox").setup({
+    silent = true,
+    auto_activate = false,
+  })
+
+Full defaults: >
+
+  {
+    auto_activate  = true,            -- auto-activate on buffer open
+    silent         = false,           -- suppress notifications
+    devbox_path    = "devbox",        -- path to devbox binary
+    lsp            = {
+      inject_env        = true,       -- inject PATH into LSP clients
+      auto_enable       = true,       -- auto-enable LSP servers from devbox PATH
+      auto_enable_filter = nil,       -- optional: { "lua_ls", "rust_analyzer" }
+    },
+    exclude_env    = {
+      "^ATUIN_",                      -- shell-specific vars (Lua patterns)
+      "^BLE_",
+      "_PREEXEC_",
+      "^BASH_",
+      "^SHELL",
+      "^TERM",
+      "^LS_COLORS",
+      "^HIST",
+      "^PROMPT",
+    },
+  }
+
+Options~
+
+  auto_activate
+      Automatically activate devbox env on |BufReadPost|/|BufNewFile| and on
+      |DirChanged|. Set to `false` to use |:DevboxActivate| manually.
+
+  silent
+      Suppress activation notifications.
+
+  devbox_path
+      Path to the devbox binary. Default: "devbox" (uses $PATH lookup).
+
+  lsp.inject_env
+      Automatically prepend devbox PATH into LSP client |cmd_env| on
+      |LspAttach|.
+
+  lsp.auto_enable
+      Scan the devbox-managed PATH for known LSP server binaries and
+      automatically call |vim.lsp.enable()| for each detected server.
+
+  lsp.auto_enable_filter
+      If set, only enable servers in this list (e.g. `{ "lua_ls",
+      "rust_analyzer" }`). Useful when you only want a subset of what devbox
+      provides.
+
+  exclude_env
+      List of Lua patterns. Environment variables whose name matches any
+      pattern are excluded when applying the devbox shellenv. Defaults filter
+      shell-specific variables. Override entirely by providing your own list.
+
+==============================================================================
+5. Commands                                          *devbox-commands*
+
+                                                 *:DevboxActivate*
+  :DevboxActivate
+      Activate the devbox environment for the current project. Walks up the
+      directory tree to find |devbox.json|. Shows a warning if the devbox
+      binary is not found.
+
+                                                 *:DevboxDeactivate*
+  :DevboxDeactivate
+      Restore |vim.env| to the pre-activation snapshot. Only works if
+      devbox was activated earlier in the session.
+
+                                                 *:DevboxStatus*
+  :DevboxStatus
+      Show the current activation state: active (with project root),
+      loading (async resolution in progress), or inactive.
+
+                                                 *:DevboxClearCache*
+  :DevboxClearCache
+      Clear both the in-memory and disk caches. Forces a fresh `devbox
+      shellenv` on next activation.
+
+==============================================================================
+6. How It Works                                  *devbox-how-it-works*
+
+1. Open a file inside a project with |devbox.json|.
+2. Walk up the tree to find the project root using |vim.fs.root| (or
+   |vim.fn.findfile| on Neovim < 0.10).
+3. Cache lookup in order:
+   - In-memory hit — env already resolved this session: instant.
+   - Disk hit — load from JSON cache file, auto-refresh async: ~0.4ms.
+   - Miss — run `devbox shellenv` via |jobstart|: ~250ms first time.
+4. Parse `export KEY=VALUE` lines from the output. Filter excluded variables.
+5. Write parsed variables to |vim.env|.
+6. |LspAttach| hook injects devbox PATH into LSP client environments.
+7. If enabled, scan PATH for LSP servers and call |vim.lsp.enable()|.
+
+Cache invalidation~
+  The disk cache is invalidated when |devbox.json| mtime changes. A background
+  refresh runs after every cache-hit activation so the env stays current.
+
+Activation model~
+  Activation is one-way: once active, the env stays for the session. The same
+  pattern used by direnv.nvim plugins — load on enter, never unload. Use
+  |:DevboxDeactivate| to restore the original env.
+
+==============================================================================
+7. LSP Integration                                      *devbox-lsp*
+
+  - Automatic PATH injection ...... |devbox-lsp-inject|
+  - Auto-enable servers ........... |devbox-lsp-auto-enable|
+  - Custom mappings ............... |devbox-lsp-custom-mappings|
+  - make_lsp_env() ................ |devbox-lsp-make-env|
+
+----------------------------------------------------------------------
+7.1 Automatic PATH injection                      *devbox-lsp-inject*
+
+By default, devbox.nvim sets up an |LspAttach| autocmd that prepends the
+devbox-resolved PATH into each LSP client's |cmd_env|. This ensures LSP
+servers find binaries like `mvn`, `java`, `go`, `rust-analyzer`, etc. from the
+devbox environment.
+
+No configuration needed. Disable with: >
+  lsp = { inject_env = false }
+
+----------------------------------------------------------------------
+7.2 Auto-enable LSP servers                 *devbox-lsp-auto-enable*
+
+Instead of installing LSP servers through mason.nvim, add them to
+|devbox.json| and let devbox.nvim detect and enable them automatically.
+
+On activation, the plugin scans PATH for every LSP server binary that
+nvim-lspconfig knows about and calls |vim.lsp.enable()| for each one found.
+
+Enabled by default as of 2026-06-02. Configure: >
+  require("devbox").setup({
+    lsp = { auto_enable = true },
+  })
+
+Filter to specific servers: >
+  require("devbox").setup({
+    lsp = {
+      auto_enable = true,
+      auto_enable_filter = { "lua_ls", "rust_analyzer" },
+    },
+  })
+
+Requires nvim-lspconfig to be installed. The plugin degrades gracefully if it
+is not — no errors, just no auto-enabling.
+
+----------------------------------------------------------------------
+7.3 Custom mappings                        *devbox-lsp-custom-mappings*
+
+If a server binary name doesn't match nvim-lspconfig's expected name, use
+`add_mapping()` before activation: >
+
+  local servers = require("devbox.lsp.servers")
+  -- Single binary → name pair
+  servers.add_mapping("my-language-server", "my_ls")
+  -- Or a table of pairs
+  servers.add_mapping({
+    ["my-language-server"] = "my_ls",
+    ["another-lsp"]        = "another_ls",
+  })
+
+User mappings override auto-detected entries when names collide. This is the
+preferred way to register custom or obscure LSP servers.
+
+----------------------------------------------------------------------
+7.4 make_lsp_env()                            *devbox-lsp-make-env*
+
+The |devbox.lsp| module provides `make_lsp_env()` for explicit LSP client
+configuration: >
+
+  local devbox_lsp = require("devbox.lsp")
+
+  -- Use with before_init (Neovim 0.11+)
+  vim.lsp.config("jdtls", {
+    before_init = function(params, cfg)
+      local env = devbox_lsp.make_lsp_env()
+      if env then cfg.cmd_env = env end
+    end,
+  })
+
+`make_lsp_env()` replaces PATH entirely with the devbox-resolved value (which
+already includes system paths). The automatic |LspAttach| hook prepends PATH
+instead — no practical difference since devbox shellenv includes the full
+system PATH.
+
+Returns `nil` when devbox is not active.
+
+==============================================================================
+8. FAQ                                                  *devbox-faq*
+
+  Q: Does this replace `devbox shell`?
+  A: No. It injects env variables into Neovim's process so tools inside the
+     editor find devbox-managed binaries. Use `devbox shell` in your terminal
+     for interactive work.
+
+  Q: What happens if `devbox` binary is not installed?
+  A: Auto-activation silently skips. |:DevboxActivate| shows a warning.
+
+  Q: Can I use this without auto-activation?
+  A: Yes. Set `auto_activate = false` and use |:DevboxActivate| manually.
+
+  Q: Does this replace mason.nvim?
+  A: It can. With `lsp.auto_enable = true`, devbox.nvim detects LSP servers
+     from your devbox-managed PATH — no need for mason to download duplicate
+     binaries. Some servers aren't packaged in nixpkgs yet; for those, keep
+     mason as a fallback. You can run both: disable auto-enable for
+     devbox-provided servers and let mason handle the rest.
+
+  Q: How is the binary→server name mapping maintained?
+  A: The plugin auto-generates a map from nvim-lspconfig's server
+     configurations at install time (cached to disk). It covers every server
+     nvim-lspconfig knows about. For custom or missing entries, use
+     |devbox-lsp-custom-mappings|.
+
+  Q: What if I use Neovim < 0.10?
+  A: |vim.fs.root| is not available. The plugin falls back to
+     |vim.fn.findfile| which works but may be slower on large directory trees.
+
+==============================================================================
+9. License                                              *devbox-license*
+
+devbox.nvim is released under the Apache 2.0 license. See LICENSE in the
+repository root.
+
+ vim:tw=78:ts=8:ft=help:norl:
