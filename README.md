@@ -27,6 +27,8 @@ Never blocks startup. Disk cache makes repeat opens instant; async
   opens load from disk (~0.4ms)
 - **LSP integration** — `LspAttach` auto‑injects devbox `PATH` into LSP client
   environments
+- **LSP auto-enable** — Detects devbox‑managed LSP servers on `PATH` and
+  auto‑enables them via `vim.lsp.enable()` (opt‑in)
 - **Smart env filtering** — Skips shell-specific variables (`ATUIN_`, `BASH_`,
   `HIST`, `PROMPT`, `SHELL`, `TERM`, etc.)
 - **Env snapshot** — Captures pre‑activation state; `deactivate()` restores it
@@ -86,7 +88,11 @@ Full defaults:
   auto_activate  = true,            -- auto-activate on buffer open
   silent         = false,           -- suppress notifications
   devbox_path    = "devbox",        -- path to devbox binary
-  lsp            = { inject_env = true },
+  lsp            = {
+    inject_env        = true,       -- inject PATH into LSP clients
+    auto_enable       = true,       -- auto-enable LSP servers from devbox PATH
+    auto_enable_filter = nil,       -- optional: { "lua_ls", "rust_analyzer" }
+  },
   exclude_env    = {
     "^ATUIN_",                      -- shell-specific vars (Lua patterns)
     "^BLE_",
@@ -166,6 +172,57 @@ vim.api.nvim_create_autocmd("LspAttach", {
 })
 ```
 
+### Auto-enable LSP Servers
+
+Instead of installing LSP servers through mason.nvim, add them to
+`devbox.json` and let devbox.nvim detect and enable them automatically:
+
+```lua
+require("devbox").setup({
+  lsp = {
+    auto_enable = true,   -- scan devbox PATH for known LSP servers
+  },
+})
+```
+
+On activation, the plugin scans `PATH` for every LSP server binary that
+nvim-lspconfig knows about and calls `vim.lsp.enable()` for each one found.
+
+#### Filtering
+
+Enable only specific servers:
+
+```lua
+lsp = {
+  auto_enable = true,
+  auto_enable_filter = { "lua_ls", "rust_analyzer", "ts_ls" },
+}
+```
+
+#### Custom mappings
+
+If a server binary name doesn't match nvim-lspconfig's expected name, register
+it with `add_mapping()` before activation:
+
+```lua
+local servers = require("devbox.lsp.servers")
+-- Single binary → name pair
+servers.add_mapping("my-language-server", "my_ls")
+-- Or a table of pairs
+servers.add_mapping({
+  ["my-language-server"]   = "my_ls",
+  ["another-lsp"]          = "another_ls",
+})
+-- Then enable auto_enable as usual
+```
+
+User mappings override auto-detected entries when names collide.
+
+*Requires:* [nvim-lspconfig](https://github.com/neovim/nvim-lspconfig) installed
+(the plugin degrades gracefully if missing).
+
+---
+
 ## FAQ
 
 **Q: Does this replace `devbox shell`?**
@@ -179,6 +236,18 @@ a warning (`devbox binary not found`).
 
 **Q: Can I use this without auto-activation?**
 Yes. Set `auto_activate = false` and call `:DevboxActivate` manually.
+
+**Q: Does this replace mason.nvim?**
+It can. With `lsp.auto_enable = true`, devbox.nvim detects LSP servers from
+your devbox-managed `PATH` — no need for mason to download duplicate binaries.
+Some servers aren't packaged in nixpkgs yet; for those, keep mason as a
+fallback. You can run both: disable auto-enable for devbox-provided servers
+and let mason handle the rest.
+
+**Q: How is the binary→server name mapping maintained?**
+The plugin auto-generates a map from nvim-lspconfig's server configurations at
+install time (cached to disk). It covers every server that nvim-lspconfig knows
+about. For custom or missing entries, use `add_mapping()`.
 
 ## Contributing
 

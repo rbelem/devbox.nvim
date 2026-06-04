@@ -12,7 +12,7 @@ M.defaults = {
   auto_activate = true,
   silent = false,
   devbox_path = "devbox",
-  lsp = { inject_env = true, auto_enable = false },
+  lsp = { inject_env = true, auto_enable = true },
   exclude_env = {
     "^ATUIN_",
     "^BLE_",
