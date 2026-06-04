@@ -30,16 +30,6 @@ local did_setup = false
 ---@type integer  -- bumped on each _async_load; on_exit only clears _loading if gen matches
 local _load_gen = 0
 
----@param t table
----@return integer
-local function tbl_count(t)
-  local c = 0
-  for _ in pairs(t) do
-    c = c + 1
-  end
-  return c
-end
-
 local function cache_hash(str)
   return vim.fn.sha256(str):sub(1, 40)
 end
@@ -320,10 +310,6 @@ function Devbox._async_load(root)
   local gen = _load_gen
   Devbox._loading = true
 
-  if not config.options.silent then
-    vim.notify("[devbox] resolving env...", vim.log.levels.INFO)
-  end
-
   local chunks = {}
   local finished = false
 
@@ -430,11 +416,11 @@ function Devbox._apply_env(env)
   local lsp_count = Devbox._maybe_auto_enable()
   if not config.options.silent then
     local name = vim.fn.fnamemodify(env.project_root, ":t")
-    local msg = string.format("[devbox] activated %s (%d vars)", name, tbl_count(env.vars))
+    local msg = "[devbox] " .. name
     if lsp_count > 0 then
-      msg = msg .. string.format(", %d LSP servers", lsp_count)
+      msg = msg .. " (" .. lsp_count .. " LSP)"
     end
-    vim.notify(msg, vim.log.levels.INFO)
+    vim.notify_once(msg, vim.log.levels.INFO)
   end
 end
 
