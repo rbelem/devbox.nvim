@@ -1,6 +1,10 @@
 {
   "$schema":  "https://raw.githubusercontent.com/jetify-com/devbox/0.17.2/.schema/devbox.schema.json",
-  "packages": ["markdownlint-cli@latest"],
+  "packages": [
+  "markdownlint-cli@latest",
+  "lua5_1@latest",
+  "luarocks@latest"
+],
   "shell": {
     "init_hook": [
       "echo 'Welcome to devbox!' > /dev/null"
