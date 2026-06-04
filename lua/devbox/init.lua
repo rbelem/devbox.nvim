@@ -142,6 +142,18 @@ function Devbox.setup(opts)
       end,
     })
 
+    vim.api.nvim_create_autocmd("VimEnter", {
+      group = grp,
+      desc = "[devbox] activate on startup",
+      callback = function()
+        if Devbox.is_active() or Devbox.is_loading() then
+          return
+        end
+        -- If no file was opened, try current working directory
+        Devbox.activate()
+      end,
+    })
+
     vim.api.nvim_create_autocmd("DirChanged", {
       group = grp,
       desc = "[devbox] re-check",
@@ -149,6 +161,11 @@ function Devbox.setup(opts)
         Devbox.activate()
       end,
     })
+
+    -- If VimEnter already passed (lazy load), activate immediately
+    if vim.v.vim_did_enter == 1 then
+      Devbox.activate()
+    end
   end
 
   if config.options.lsp and config.options.lsp.inject_env then

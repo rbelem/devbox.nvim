@@ -5,6 +5,40 @@
       "last_modified": "2026-05-27T10:28:13Z",
       "resolved": "github:NixOS/nixpkgs/4100e830e085863741bc69b156ec4ccd53ab5be0?lastModified=1779877693&narHash=sha256-NOF9NAREhxr50bbBfVcVOq%2BArCMSoe8dP79Pk2uyARk%3D"
     },
+    "lua5_1@latest": {
+      "last_modified": "2022-09-12T23:24:01Z",
+      "resolved": "github:NixOS/nixpkgs/994df04c3c700fe9edb1b69b82ba3c627e5e04ff#lua5_1",
+      "source": "devbox-search",
+      "version": "5.1.5",
+      "systems": {
+        "aarch64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/v9z73vp9w4b5hjf1yxqz2p3drgk1hadw-lua-5.1.5",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/v9z73vp9w4b5hjf1yxqz2p3drgk1hadw-lua-5.1.5"
+        },
+        "x86_64-linux": {
+          "outputs": [
+            {
+              "name": "out",
+              "path": "/nix/store/xan5g8j9qp1mq3wclahn3gm5gv1kaa6m-lua-5.1.5",
+              "default": true
+            }
+          ],
+          "store_path": "/nix/store/xan5g8j9qp1mq3wclahn3gm5gv1kaa6m-lua-5.1.5"
+        }
+      }
+    },
+    "luarocks@latest": {
+      "last_modified": "2023-02-24T09:01:09Z",
+      "resolved": "github:NixOS/nixpkgs/7d0ed7f2e5aea07ab22ccb338d27fbe347ed2f11#luarocks",
+      "source": "devbox-search",
+      "version": "3.9.1"
+    },
     "markdownlint-cli@latest": {
       "last_modified": "2026-04-23T13:07:47Z",
       "resolved": "github:NixOS/nixpkgs/01fbdeef22b76df85ea168fbfe1bfd9e63681b30#markdownlint-cli",
