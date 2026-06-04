@@ -289,6 +289,20 @@ function Devbox.get_path()
   return (env and env.path) or ""
 end
 
+--- Status string for use in statusline plugins (lualine, etc.).
+--- Returns a short label (or empty when inactive) so users can drop it
+--- directly into a lualine section.
+---@return string
+function Devbox.statusline()
+  if Devbox.is_loading() then
+    return "Devbox..."
+  end
+  if Devbox.is_active() then
+    return "Devbox"
+  end
+  return ""
+end
+
 --- Clear the env cache (memory + disk).
 ---@param project_root? string nil clears all
 function Devbox.clear_cache(project_root)
