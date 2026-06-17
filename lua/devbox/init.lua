@@ -62,10 +62,11 @@ function Devbox._notify(msg, level, opts)
     end
     -- Auto-clear info-level messages after 3s
     if level ~= vim.log.levels.WARN and level ~= vim.log.levels.ERROR then
-      _notify_timer = vim.defer_fn(function()
+      _notify_timer = vim.uv.new_timer()
+      _notify_timer:start(3000, 0, vim.schedule_wrap(function()
         pcall(vim.api.nvim_echo, { { "", "" } }, false, {})
         _notify_timer = nil
-      end, 3000)
+      end))
     end
     return
   end
@@ -135,7 +136,7 @@ local function cache_save(root, env)
   env.cached_at = mtime
   local ok, json = pcall(vim.json.encode, env)
   if ok then
-    vim.fn.writefile(vim.split(json, "\n"), cache_path(root))
+    pcall(vim.fn.writefile, vim.split(json, "\n"), cache_path(root))
   end
 end
 
@@ -305,11 +306,17 @@ function Devbox.activate(dir)
     return false
   end
 
-  -- in-memory cache hit
+  -- in-memory cache hit (verify freshness)
   if env_cache[root] then
-    active_root = root
-    Devbox._apply_env(env_cache[root])
-    return true
+    local mtime = vim.fn.getftime(root .. "/devbox.json")
+    if mtime < 0 or env_cache[root].cached_at ~= mtime then
+      -- Stale entry, discard
+      env_cache[root] = nil
+    else
+      active_root = root
+      Devbox._apply_env(env_cache[root])
+      return true
+    end
   end
 
   -- disk cache hit
@@ -360,16 +367,24 @@ function Devbox.statusline()
 end
 
 --- Clear the env cache (memory + disk).
+--- Preserves LSP server cache (lsp_servers.json, nix_map.json).
 ---@param project_root? string nil clears all
 function Devbox.clear_cache(project_root)
   if project_root then
     env_cache[project_root] = nil
-    local ok, _ = pcall(vim.fn.delete, cache_path(project_root))
-    if ok then end
+    pcall(vim.fn.delete, cache_path(project_root))
   else
     env_cache = {}
     local dir = vim.fn.stdpath("cache") .. "/devbox"
-    pcall(vim.fn.delete, dir, "rf")
+    -- Only delete env cache files (hash-named .json), keep LSP infrastructure files
+    local ok, entries = pcall(vim.fn.readdir, dir)
+    if ok and entries then
+      for _, entry in ipairs(entries) do
+        if entry:match("^[0-9a-f]+%.json$") then
+          pcall(vim.fn.delete, dir .. "/" .. entry)
+        end
+      end
+    end
   end
 end
 
@@ -385,6 +400,7 @@ function Devbox._async_load(root)
 
   local job_id = vim.fn.jobstart({ config.options.devbox_path, "shellenv" }, {
     stdout_buffered = true,
+    cwd = root,
     on_stdout = function(_, data)
       chunks = data
     end,
@@ -411,10 +427,9 @@ function Devbox._async_load(root)
         path = parsed.vars["PATH"] or "",
       }
 
-      env_cache[root] = env
-      cache_save(root, env)
-
       if gen == _load_gen then
+        env_cache[root] = env
+        cache_save(root, env)
         Devbox._loading = false
         active_root = root
         Devbox._apply_env(env)
@@ -432,6 +447,12 @@ function Devbox._async_load(root)
         Devbox._notify("[devbox] shellenv timed out", vim.log.levels.WARN)
       end
     end, 30000)
+  else
+    -- jobstart failed (bad binary, no shell, etc.)
+    if gen == _load_gen then
+      Devbox._loading = false
+    end
+    Devbox._notify("[devbox] failed to start shellenv (" .. tostring(job_id) .. ")", vim.log.levels.WARN)
   end
 end
 
@@ -506,12 +527,11 @@ function Devbox._is_excluded(key)
 end
 
 --- Apply a parsed devbox env to vim.env, then auto-enable LSP servers.
+--- Vars are already filtered by _parse_shellenv at parse time.
 ---@param env devbox.Env
 function Devbox._apply_env(env)
   for k, v in pairs(env.vars) do
-    if not Devbox._is_excluded(k) then
-      vim.env[k] = v
-    end
+    vim.env[k] = v
   end
   local lsp_count = Devbox._maybe_auto_enable()
   local name = vim.fn.fnamemodify(env.project_root, ":t")
