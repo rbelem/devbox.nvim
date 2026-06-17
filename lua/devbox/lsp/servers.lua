@@ -79,23 +79,26 @@ local function _compute_sha()
 end
 
 --- Generate server map from nvim-lspconfig, writes JSON cache.
+---@param sha? string pre-computed SHA256 of lspconfig files (avoids re-reading)
 ---@return boolean true if generation succeeded
-function M._generate()
+function M._generate(sha)
   local files = vim.api.nvim_get_runtime_file("lspconfig/server_configurations/*.lua", true)
   if #files == 0 then
     return false
   end
   table.sort(files)
 
-  -- Compute SHA from file contents first
-  local sha_parts = {}
-  for _, f in ipairs(files) do
-    local ok, data = pcall(vim.fn.readfile, f)
-    if ok and data then
-      sha_parts[#sha_parts + 1] = table.concat(data, "\n")
+  -- Compute SHA from file contents if not provided
+  if not sha then
+    local sha_parts = {}
+    for _, f in ipairs(files) do
+      local ok, data = pcall(vim.fn.readfile, f)
+      if ok and data then
+        sha_parts[#sha_parts + 1] = table.concat(data, "\n")
+      end
     end
+    sha = vim.fn.sha256(table.concat(sha_parts))
   end
-  local sha = vim.fn.sha256(table.concat(sha_parts))
 
   -- Extract binary→name map
   ---@type table<string, {binary: string}>
@@ -157,10 +160,12 @@ local function _load_or_generate()
         M._generated_map = decoded
         return true
       end
+      -- Cache stale, regenerate with pre-computed SHA to avoid re-reading files
+      return M._generate(current_sha)
     end
   end
 
-  -- No valid cache — regenerate
+  -- No valid cache — regenerate (no SHA available, _generate will compute it)
   return M._generate()
 end
 
