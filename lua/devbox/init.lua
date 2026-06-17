@@ -435,6 +435,25 @@ function Devbox._async_load(root)
   end
 end
 
+--- Check if all components of a devbox PATH are already present in the client PATH.
+--- The devbox PATH may be multi-component (e.g. "/devbox/bin:/nix/store/xxx/bin").
+--- Returns true only when every component of `dp` exists as a component in `cur`.
+---@param cur string  colon-separated client PATH
+---@param dp string  colon-separated devbox PATH (may have multiple entries)
+---@return boolean
+local function devbox_path_already_present(cur, dp)
+  local cur_set = {}
+  for p in cur:gmatch("[^:]+") do
+    cur_set[p] = true
+  end
+  for p in dp:gmatch("[^:]+") do
+    if not cur_set[p] then
+      return false
+    end
+  end
+  return true
+end
+
 --- Prepend devbox PATH to an LSP client's cmd_env.
 ---@param client table|nil
 function Devbox._inject_path(client)
@@ -447,7 +466,7 @@ function Devbox._inject_path(client)
   end
   client.config.cmd_env = client.config.cmd_env or {}
   local cur = client.config.cmd_env.PATH or vim.env.PATH or ""
-  if not cur:find(dp, 1, true) then
+  if not devbox_path_already_present(cur, dp) then
     client.config.cmd_env.PATH = dp .. ":" .. cur
   end
 end
