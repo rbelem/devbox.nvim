@@ -23,7 +23,7 @@ Entry point: `require("devbox").setup(opts)`.
 
 - **Never blocks startup.** `activate()` returns immediately even on cache miss — spawns `vim.fn.jobstart("devbox shellenv", ...)` in background.
 - **Two-tier cache:** in-memory table + disk files at `stdpath("cache")/devbox/<cache_hash(project_root)>.json`. Invalidated when `devbox.json` mtime changes.
-- **Env snapshot:** first `activate()` snapshots entire `vim.env`; `deactivate()` restores it.
+- **One-way activation:** once active, env stays for the session. No deactivation (see ADR 0001 — direnv.nvim precedent).
 - **LSP injection:** `LspAttach` autocmd prepends devbox PATH into `client.config.cmd_env`. Only works for future attaches.
 - **Shell env parser:** naive `export KEY=VALUE` regex — no bash evaluation. Excluded vars filtered by prefix patterns.
 - **Tests use plenary.nvim test harness.** Run with `devbox run test`. Run a single file: `devbox run test-file FILE=tests/test_init_spec.lua`.
@@ -34,7 +34,6 @@ Entry point: `require("devbox").setup(opts)`.
 | Command | Action |
 |---|---|
 | `DevboxActivate` | Manual activation for current dir |
-| `DevboxDeactivate` | Restore env snapshot |
 | `DevboxStatus` | Show active/loading/inactive |
 | `DevboxClearCache` | Clear in-memory + disk cache |
 
@@ -48,7 +47,6 @@ Entry point: `require("devbox").setup(opts)`.
 
 - **Don't add test infrastructure** without asking — repo has none and that's intentional.
 - **Don't refactor `_async_load` to be sync** — the whole design is async-first.
-- **`Devbox.deactivate()` is not idempotent** — calling it twice on a fresh session is a no-op (no active_root).
 - **`_inject_path` doesn't re-inject** — only prepends if devbox PATH not already present.
 - **Cache key is SHA256 truncated to 40 chars** — not collision-safe but fine for cache filenames.
 - **`vim.fs.root` is Neovim ≥0.10** — fallback to `vim.fn.findfile` handles older versions.

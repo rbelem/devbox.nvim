@@ -141,12 +141,7 @@ Options~
       directory tree to find |devbox.json|. Shows a warning if the devbox
       binary is not found.
 
-                                                 *:DevboxDeactivate*
-  :DevboxDeactivate
-      Restore |vim.env| to the pre-activation snapshot. Only works if
-      devbox was activated earlier in the session.
-
-                                                 *:DevboxStatus*
+                                                  *:DevboxStatus*
   :DevboxStatus
       Show the current activation state: active (with project root),
       loading (async resolution in progress), or inactive.
@@ -177,8 +172,8 @@ Cache invalidation~
 
 Activation model~
   Activation is one-way: once active, the env stays for the session. The same
-  pattern used by direnv.nvim plugins — load on enter, never unload. Use
-  |:DevboxDeactivate| to restore the original env.
+  pattern used by direnv.nvim plugins — load on enter, never unload. Env stays
+  active for the session once loaded.
 
 ==============================================================================
 7. LSP Integration                                      *devbox-lsp*

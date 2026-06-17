@@ -1,6 +1,5 @@
 :DevboxActivate	devbox.txt	/*:DevboxActivate*
 :DevboxClearCache	devbox.txt	/*:DevboxClearCache*
-:DevboxDeactivate	devbox.txt	/*:DevboxDeactivate*
 :DevboxStatus	devbox.txt	/*:DevboxStatus*
 devbox-commands	devbox.txt	/*devbox-commands*
 devbox-config	devbox.txt	/*devbox-config*

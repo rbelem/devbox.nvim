@@ -31,9 +31,9 @@ Never blocks startup. Disk cache makes repeat opens instant; async
   auto‑enables them via `vim.lsp.enable()` (opt‑in)
 - **Smart env filtering** — Skips shell-specific variables (`ATUIN_`, `BASH_`,
   `HIST`, `PROMPT`, `SHELL`, `TERM`, etc.)
-- **Env snapshot** — Captures pre‑activation state; `deactivate()` restores it
+- **One-way activation** — Once active, env stays for the session
   fully
-- **Commands** — `DevboxActivate`, `DevboxDeactivate`, `DevboxStatus`,
+- **Commands** — `DevboxActivate`, `DevboxStatus`,
   `DevboxClearCache`
 
 ## Requirements
@@ -76,7 +76,7 @@ what you need:
 
 ```lua
 require("devbox").setup({
-  silent = true,         -- suppress activation/deactivation notifications
+  notify = "silent",     -- suppress activation/deactivation notifications
   auto_activate = false, -- manual :DevboxActivate only
 })
 ```
@@ -86,7 +86,7 @@ Full defaults:
 ```lua
 {
   auto_activate  = true,            -- auto-activate on buffer open
-  silent         = false,           -- suppress notifications
+  notify         = "default",       -- notification style ("default"|"statusline"|"progress"|"silent")
   devbox_path    = "devbox",        -- path to devbox binary
   lsp            = {
     inject_env        = true,       -- inject PATH into LSP clients
@@ -112,7 +112,6 @@ Full defaults:
 | Command | Description |
 | --- | --- |
 | `:DevboxActivate` | Activate devbox env for current project |
-| `:DevboxDeactivate` | Restore `vim.env` to pre‑activation state |
 | `:DevboxStatus` | Show activation state (active, loading, inactive) |
 | `:DevboxClearCache` | Clear both in‑memory and disk caches |
 
@@ -126,7 +125,6 @@ Full defaults:
    - **Miss** — run `devbox shellenv` async via `jobstart`: ~250ms
 4. Parse `export KEY=VALUE` lines, filter excluded vars, write to `vim.env`
 5. `LspAttach` hook injects devbox `PATH` into LSP clients
-6. `:DevboxDeactivate` restores `vim.env` from the pre-activation snapshot
 
 Cache is invalidated automatically when `devbox.json` mtime changes.
 
