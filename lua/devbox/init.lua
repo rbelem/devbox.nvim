@@ -21,6 +21,63 @@ local config = require("devbox.config")
 
 local Devbox = {}
 
+-- ── Notification router ──
+
+--- Route a notification based on the configured `notify` mode.
+---@param msg string
+---@param level number  vim.log.levels.*
+---@param opts? { once?: boolean }
+local _notify_timer = nil ---@type uv_timer_t?
+
+--- Route a notification based on the configured `notify` mode.
+---@param msg string
+---@param level number  vim.log.levels.*
+---@param opts? { once?: boolean, force?: boolean }  force — notify even in statusline mode (for explicit user commands)
+function Devbox._notify(msg, level, opts)
+  local mode = config.options.notify or "default"
+  if mode == "silent" then
+    return
+  end
+
+  if mode == "statusline" and not (opts and opts.force) then
+    -- statusline() reflects loading/active state instead;
+    -- explicit user commands (DevboxStatus etc.) still notify
+    return
+  end
+
+  if mode == "progress" then
+    local hl = ""
+    if level == vim.log.levels.WARN or level == vim.log.levels.ERROR then
+      hl = "WarningMsg"
+    elseif level == vim.log.levels.INFO then
+      hl = "MoreMsg"
+    end
+    pcall(vim.api.nvim_echo, { { msg, hl } }, false, {})
+
+    -- Cancel any pending clear to avoid races
+    if _notify_timer then
+      _notify_timer:stop()
+      _notify_timer:close()
+      _notify_timer = nil
+    end
+    -- Auto-clear info-level messages after 3s
+    if level ~= vim.log.levels.WARN and level ~= vim.log.levels.ERROR then
+      _notify_timer = vim.defer_fn(function()
+        pcall(vim.api.nvim_echo, { { "", "" } }, false, {})
+        _notify_timer = nil
+      end, 3000)
+    end
+    return
+  end
+
+  -- default mode: use vim.notify / vim.notify_once
+  if opts and opts.once then
+    vim.notify_once(msg, level)
+  else
+    vim.notify(msg, level)
+  end
+end
+
 ---@type table<string, devbox.Env>
 local env_cache = {}
 ---@type string?
@@ -176,25 +233,25 @@ function Devbox.setup(opts)
 
   vim.api.nvim_create_user_command("DevboxActivate", function()
     if not Devbox.available() then
-      vim.notify("[devbox] devbox binary not found", vim.log.levels.WARN)
+      Devbox._notify("[devbox] devbox binary not found", vim.log.levels.WARN, { force = true })
     elseif not Devbox.activate() then
-      vim.notify("[devbox] no devbox.json found", vim.log.levels.INFO)
+      Devbox._notify("[devbox] no devbox.json found", vim.log.levels.INFO, { force = true })
     end
   end, { desc = "[devbox] activate devbox env" })
 
   vim.api.nvim_create_user_command("DevboxStatus", function()
     if Devbox.is_loading() then
-      vim.notify("[devbox] loading env...", vim.log.levels.INFO)
+      Devbox._notify("[devbox] loading env...", vim.log.levels.INFO, { force = true })
     elseif Devbox.is_active() then
-      vim.notify("[devbox] active: " .. (Devbox.get_active_root() or "?"))
+      Devbox._notify("[devbox] active: " .. (Devbox.get_active_root() or "?"), vim.log.levels.INFO, { force = true })
     else
-      vim.notify("[devbox] inactive")
+      Devbox._notify("[devbox] inactive", vim.log.levels.INFO, { force = true })
     end
   end, { desc = "[devbox] show status" })
 
   vim.api.nvim_create_user_command("DevboxClearCache", function()
     Devbox.clear_cache()
-    vim.notify("[devbox] cache cleared")
+    Devbox._notify("[devbox] cache cleared", vim.log.levels.INFO, { force = true })
   end, { desc = "[devbox] clear env cache" })
 end
 
@@ -342,9 +399,7 @@ function Devbox._async_load(root)
       finished = true
 
       if exit_code ~= 0 then
-        if not config.options.silent then
-          vim.notify("[devbox] shellenv failed (exit " .. exit_code .. ")", vim.log.levels.WARN)
-        end
+        Devbox._notify("[devbox] shellenv failed (exit " .. exit_code .. ")", vim.log.levels.WARN)
         return
       end
 
@@ -428,14 +483,12 @@ function Devbox._apply_env(env)
     end
   end
   local lsp_count = Devbox._maybe_auto_enable()
-  if not config.options.silent then
-    local name = vim.fn.fnamemodify(env.project_root, ":t")
-    local msg = "[devbox] " .. name
-    if lsp_count > 0 then
-      msg = msg .. " (" .. lsp_count .. " LSP)"
-    end
-    vim.notify_once(msg, vim.log.levels.INFO)
+  local name = vim.fn.fnamemodify(env.project_root, ":t")
+  local msg = "[devbox] " .. name
+  if lsp_count > 0 then
+    msg = msg .. " (" .. lsp_count .. " LSP)"
   end
+  Devbox._notify(msg, vim.log.levels.INFO, { once = true })
 end
 
 return Devbox

@@ -42,7 +42,7 @@ describe("devbox.lsp", function()
 
   describe("make_lsp_env()", function()
     it("returns nil when devbox is not active", function()
-      local devbox = helper.reload_plugin({ silent = true })
+      local devbox = helper.reload_plugin({ notify = "silent" })
 
       -- Don't activate — state is inactive
       local lsp = require("devbox.lsp")
@@ -52,7 +52,7 @@ describe("devbox.lsp", function()
     end)
 
     it("returns env table with devbox PATH when active", function()
-      local devbox = helper.reload_plugin({ silent = true })
+      local devbox = helper.reload_plugin({ notify = "silent" })
       activate_via_mock(devbox)
 
       local lsp = require("devbox.lsp")
@@ -65,7 +65,7 @@ describe("devbox.lsp", function()
     end)
 
     it("includes DEVBOX_PROJECT_ROOT when active", function()
-      local devbox = helper.reload_plugin({ silent = true })
+      local devbox = helper.reload_plugin({ notify = "silent" })
       activate_via_mock(devbox)
 
       local lsp = require("devbox.lsp")
@@ -76,7 +76,7 @@ describe("devbox.lsp", function()
     end)
 
     it("returns a deep copy (mutating result doesn't affect vim.env)", function()
-      local devbox = helper.reload_plugin({ silent = true })
+      local devbox = helper.reload_plugin({ notify = "silent" })
       activate_via_mock(devbox)
 
       local lsp = require("devbox.lsp")

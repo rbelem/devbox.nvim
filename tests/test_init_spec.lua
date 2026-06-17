@@ -1,6 +1,6 @@
 --- Tests for lua/devbox/init.lua
 --- Covers: find_root, available, _is_excluded, _parse_shellenv,
----         activate/deactivate, _apply_env, _inject_path, clear_cache.
+---         activate, _apply_env, _inject_path, clear_cache.
 
 local helper = require("helpers")
 
@@ -298,7 +298,7 @@ describe("Devbox._apply_env", function()
 end)
 
 -- ═══════════════════════════════════════════════════════════════
--- activate / deactivate cycle
+-- activate
 -- ═══════════════════════════════════════════════════════════════
 
 describe("Devbox.activate", function()
@@ -588,6 +588,82 @@ describe("Devbox.clear_cache", function()
     -- no activation, just verify the API works
     devbox.clear_cache()
     assert.is_false(devbox.is_active())
+  end)
+end)
+
+-- ═══════════════════════════════════════════════════════════════
+-- _notify — notification routing
+-- ═══════════════════════════════════════════════════════════════
+
+describe("Devbox._notify", function()
+  before_each(function()
+    helper.take_env_snapshot()
+    helper.mock_notify()
+  end)
+
+  after_each(function()
+    helper.restore_notify()
+    helper.restore_env()
+  end)
+
+  it("default mode calls vim.notify", function()
+    local devbox = helper.reload_plugin({ notify = "default" })
+    devbox._notify("hello", vim.log.levels.INFO)
+    assert.are.equal(1, #helper._notify_calls)
+    assert.are.equal("hello", helper._notify_calls[1].msg)
+    assert.is_nil(helper._notify_calls[1].once)
+  end)
+
+  it("default mode with once calls vim.notify_once", function()
+    local devbox = helper.reload_plugin({ notify = "default" })
+    devbox._notify("once msg", vim.log.levels.INFO, { once = true })
+    assert.are.equal(1, #helper._notify_calls)
+    assert.are.equal("once msg", helper._notify_calls[1].msg)
+    assert.is_true(helper._notify_calls[1].once)
+  end)
+
+  it("silent mode does nothing", function()
+    local devbox = helper.reload_plugin({ notify = "silent" })
+    devbox._notify("should not appear", vim.log.levels.WARN)
+    devbox._notify("nor this", vim.log.levels.INFO)
+    assert.are.equal(0, #helper._notify_calls)
+    assert.are.equal(0, #helper._echo_calls)
+  end)
+
+  it("statusline mode suppresses non-forced calls", function()
+    local devbox = helper.reload_plugin({ notify = "statusline" })
+    devbox._notify("background noise", vim.log.levels.INFO)
+    assert.are.equal(0, #helper._notify_calls)
+    assert.are.equal(0, #helper._echo_calls)
+  end)
+
+  it("statusline mode allows forced calls (user commands)", function()
+    local devbox = helper.reload_plugin({ notify = "statusline" })
+    devbox._notify("devbox status", vim.log.levels.INFO, { force = true })
+    assert.are.equal(1, #helper._notify_calls)
+    assert.are.equal("devbox status", helper._notify_calls[1].msg)
+  end)
+
+  it("progress mode calls nvim_echo", function()
+    local devbox = helper.reload_plugin({ notify = "progress" })
+    devbox._notify("loading...", vim.log.levels.INFO)
+    assert.are.equal(0, #helper._notify_calls)
+    assert.are.equal(1, #helper._echo_calls)
+    assert.matches("loading", helper._echo_calls[1].chunks[1][1] or "")
+  end)
+
+  it("progress mode uses WarningMsg for WARN level", function()
+    local devbox = helper.reload_plugin({ notify = "progress" })
+    devbox._notify("oops", vim.log.levels.WARN)
+    assert.are.equal(1, #helper._echo_calls)
+    assert.are.equal("WarningMsg", helper._echo_calls[1].chunks[1][2])
+  end)
+
+  it("progress mode uses MoreMsg for INFO level", function()
+    local devbox = helper.reload_plugin({ notify = "progress" })
+    devbox._notify("info", vim.log.levels.INFO)
+    assert.are.equal(1, #helper._echo_calls)
+    assert.are.equal("MoreMsg", helper._echo_calls[1].chunks[1][2])
   end)
 end)
 

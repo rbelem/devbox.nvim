@@ -58,7 +58,7 @@ function helpers.reload_plugin(opts)
   local devbox = require("devbox")
   -- Sync aliases so require("devbox.init") → same instance
   package.loaded["devbox.init"] = devbox
-  devbox.setup(vim.tbl_deep_extend("force", { silent = true }, opts or {}))
+  devbox.setup(vim.tbl_deep_extend("force", { notify = "silent" }, opts or {}))
   return devbox
 end
 
@@ -223,6 +223,47 @@ function helpers.restore_runtime_files()
     vim.api.nvim_get_runtime_file = orig_get_runtime_file
     orig_get_runtime_file = nil
   end
+end
+
+-- ── Mock vim.notify / vim.notify_once / nvim_echo ──
+
+local orig_notify
+local orig_notify_once
+local orig_echo
+
+--- Replace vim.notify with a spy that stores calls.
+function helpers.mock_notify()
+  orig_notify = vim.notify
+  orig_notify_once = vim.notify_once
+  orig_echo = vim.api.nvim_echo
+  helpers._notify_calls = {}
+  helpers._echo_calls = {}
+  vim.notify = function(msg, level, opts)
+    helpers._notify_calls[#helpers._notify_calls + 1] = { msg = msg, level = level, opts = opts }
+  end
+  vim.notify_once = function(msg, level, opts)
+    helpers._notify_calls[#helpers._notify_calls + 1] = { msg = msg, level = level, opts = opts, once = true }
+  end
+  vim.api.nvim_echo = function(chunks, history, opts)
+    helpers._echo_calls[#helpers._echo_calls + 1] = { chunks = chunks, history = history, opts = opts }
+  end
+end
+
+function helpers.restore_notify()
+  if orig_notify then
+    vim.notify = orig_notify
+    orig_notify = nil
+  end
+  if orig_notify_once then
+    vim.notify_once = orig_notify_once
+    orig_notify_once = nil
+  end
+  if orig_echo then
+    vim.api.nvim_echo = orig_echo
+    orig_echo = nil
+  end
+  helpers._notify_calls = nil
+  helpers._echo_calls = nil
 end
 
 -- ── Mock lspconfig availability ──

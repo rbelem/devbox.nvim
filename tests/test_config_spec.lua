@@ -13,7 +13,7 @@ describe("devbox.config", function()
     package.loaded["devbox.config"] = nil
     defaults_shallow = {
       auto_activate = true,
-      silent = false,
+      notify = "default",
       devbox_path = "devbox",
       lsp = { inject_env = true },
       exclude_env = {
@@ -59,8 +59,8 @@ describe("devbox.config", function()
 
     it("merges user opts, overriding defaults", function()
       local config = require("devbox.config")
-      config.setup({ silent = true, auto_activate = false })
-      assert.is_true(config.options.silent)
+      config.setup({ notify = "statusline", auto_activate = false })
+      assert.are.equal("statusline", config.options.notify)
       assert.is_false(config.options.auto_activate)
     end)
 
@@ -80,6 +80,24 @@ describe("devbox.config", function()
       local config = require("devbox.config")
       config.setup({ exclude_env = { "^CUSTOM_" } })
       assert.are.same({ "^CUSTOM_" }, config.options.exclude_env)
+    end)
+
+    it("honours custom notify mode", function()
+      local config = require("devbox.config")
+      config.setup({ notify = "statusline" })
+      assert.are.equal("statusline", config.options.notify)
+    end)
+
+    it("honours 'progress' notify mode", function()
+      local config = require("devbox.config")
+      config.setup({ notify = "progress" })
+      assert.are.equal("progress", config.options.notify)
+    end)
+
+    it("honours 'silent' notify mode", function()
+      local config = require("devbox.config")
+      config.setup({ notify = "silent" })
+      assert.are.equal("silent", config.options.notify)
     end)
   end)
 end)

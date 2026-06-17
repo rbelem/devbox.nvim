@@ -65,7 +65,7 @@ need.
 
 Example: >
   require("devbox").setup({
-    silent = true,
+    notify = "silent",
     auto_activate = false,
   })
 
@@ -73,7 +73,7 @@ Full defaults: >
 
   {
     auto_activate  = true,            -- auto-activate on buffer open
-    silent         = false,           -- suppress notifications
+    notify         = "default",       -- notification style ("default"|"statusline"|"progress"|"silent")
     devbox_path    = "devbox",        -- path to devbox binary
     lsp            = {
       inject_env        = true,       -- inject PATH into LSP clients
@@ -99,8 +99,17 @@ Options~
       Automatically activate devbox env on |BufReadPost|/|BufNewFile| and on
       |DirChanged|. Set to `false` to use |:DevboxActivate| manually.
 
-  silent
-      Suppress activation notifications.
+  notify
+      Controls how notifications are displayed. One of:
+      - `"default"` (default): Use |vim.notify|/|vim.notify_once|.
+      - `"statusline"`: Suppress |vim.notify| calls; use
+        `Devbox.statusline()` instead to show loading/active state in your
+        statusline plugin (lualine, etc.).
+      - `"progress"`: Display messages in the command-line area via
+        |nvim_echo()|, with persistent loading-style display.
+        Info-level messages auto-clear after 3 seconds.
+      - `"silent"`: Suppress all notifications. Replaces the former
+        `silent = true` option.
 
   devbox_path
       Path to the devbox binary. Default: "devbox" (uses $PATH lookup).
