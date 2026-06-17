@@ -142,7 +142,6 @@ end
 --- Auto-detect and enable LSP servers from the devbox PATH.
 --- Only runs when auto_enable is configured and nvim-lspconfig is installed.
 ---@return integer number of servers enabled
----@return integer
 function Devbox._maybe_auto_enable()
   if not config.options.lsp or not config.options.lsp.auto_enable then
     return 0
