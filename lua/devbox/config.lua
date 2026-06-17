@@ -45,6 +45,15 @@ function M.setup(opts)
 
   M.options = vim.tbl_deep_extend("force", {}, M.defaults, opts)
 
+  -- Validate lsp option is a table (common mistake: passing true/false)
+  if M.options.lsp ~= nil and type(M.options.lsp) ~= "table" then
+    vim.notify(
+      "[devbox] invalid 'lsp' option, expected a table, got " .. type(M.options.lsp),
+      vim.log.levels.WARN
+    )
+    M.options.lsp = nil
+  end
+
   -- Validate notify value
   if not VALID_NOTIFY[M.options.notify] then
     vim.notify(
