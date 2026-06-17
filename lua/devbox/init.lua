@@ -383,7 +383,7 @@ function Devbox._async_load(root)
   local chunks = {}
   local finished = false
 
-  vim.fn.jobstart({ config.options.devbox_path, "shellenv" }, {
+  local job_id = vim.fn.jobstart({ config.options.devbox_path, "shellenv" }, {
     stdout_buffered = true,
     on_stdout = function(_, data)
       chunks = data
@@ -421,6 +421,18 @@ function Devbox._async_load(root)
       end
     end),
   })
+  if job_id and job_id > 0 then
+    vim.defer_fn(function()
+      if not finished then
+        vim.fn.jobstop(job_id)
+        finished = true
+        if gen == _load_gen then
+          Devbox._loading = false
+        end
+        Devbox._notify("[devbox] shellenv timed out", vim.log.levels.WARN)
+      end
+    end, 30000)
+  end
 end
 
 --- Prepend devbox PATH to an LSP client's cmd_env.
