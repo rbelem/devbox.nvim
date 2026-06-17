@@ -15,7 +15,8 @@ function M.make_lsp_env()
   setmetatable(env, nil)  -- strip proxy metatable so mutations don't leak
   local devbox_path = devbox.get_path()
   if devbox_path ~= "" then
-    env["PATH"] = devbox_path
+    local cur = env["PATH"] or ""
+    env["PATH"] = devbox_path .. ":" .. cur
   end
   local root = devbox.get_active_root()
   if root then
