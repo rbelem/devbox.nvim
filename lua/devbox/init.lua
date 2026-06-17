@@ -389,15 +389,15 @@ function Devbox._async_load(root)
       chunks = data
     end,
     on_exit = vim.schedule_wrap(function(_, exit_code)
-      if gen == _load_gen then
-        Devbox._loading = false
-      end
-      if finished or active_root then
+      if finished then
         return
       end
       finished = true
 
       if exit_code ~= 0 then
+        if gen == _load_gen then
+          Devbox._loading = false
+        end
         Devbox._notify("[devbox] shellenv failed (exit " .. exit_code .. ")", vim.log.levels.WARN)
         return
       end
@@ -414,7 +414,8 @@ function Devbox._async_load(root)
       env_cache[root] = env
       cache_save(root, env)
 
-      if not active_root then
+      if gen == _load_gen then
+        Devbox._loading = false
         active_root = root
         Devbox._apply_env(env)
       end
